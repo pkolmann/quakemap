@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+
+    <title>Erdbeben der letzten 30 Tage</title>
+
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+          integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
+          crossorigin=""/>
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"
+            integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA=="
+            crossorigin=""></script>
+    <script src="leaflet.ajax.min.js"></script>
+    <script src="leaflet-hash.js"></script>
+    <script src="svg-icon.js"></script>
+
+    <link rel="stylesheet" href="easy-button.css">
+    <script src="easy-button.js"></script>
+
+
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+        }
+
+        #map {
+            width: 600px;
+            height: 400px;
+        }
+
+        .locator {
+            font-size: 1.5em;
+        }
+    </style>
+
+    <style>body {
+        padding: 0;
+        margin: 0;
+    }
+
+    #map {
+        height: 100%;
+        width: 100vw;
+    }</style>
+</head>
+<body>
+
+<div id='map'></div>
+
+<script>
+    const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const iconSizes = [[24, 32], [32, 48], [40, 60], [56, 84]];
+    const map = L.map('map').fitWorld();
+    let now = new Date().getTime() / 1000;
+    let timeFilter = 100;
+
+    function onLocationFound(e) {
+        const radius = e.accuracy / 2;
+
+        L.marker(e.latlng).addTo(map)
+            .bindPopup("You are within " + radius + " meters from this point").openPopup();
+
+        L.circle(e.latlng, radius).addTo(map);
+    }
+
+    function onLocationError(e) {
+        alert(e.message);
+    }
+
+    function formatDate(dateIn) {
+        const date = new Date(dateIn);
+        let dateStr = '';
+        dateStr = dateStr + weekDays[date.getDay()] + ' ';
+        dateStr = dateStr + date.getDate().toString().padStart(2, '0') + '. ';
+        dateStr = dateStr + (date.getMonth() + 1).toString().padStart(2, '0') + '. ';
+        dateStr = dateStr + date.getFullYear() + ', ';
+        dateStr = dateStr + date.getHours().toString().padStart(2, '0') + ':';
+        dateStr = dateStr + date.getMinutes().toString().padStart(2, '0') + ':';
+        dateStr = dateStr + date.getSeconds().toString().padStart(2, '0') + ' ';
+        return dateStr;
+    }
+
+    function popUp(f, l, source = undefined) {
+        now = new Date().getTime() / 1000;
+        const out = [];
+        if (f.properties) {
+            if ('time' in f.properties) {
+                let date = new Date(f.properties['time']).getTime() / 1000;
+                let dateDiff = now - date;
+                if (dateDiff < 86400) {
+                    let hours = Math.floor(dateDiff / 3600);
+                    let mins = Math.round((dateDiff - hours * 3600) / 60);
+                    out.push("Time: " + formatDate(f.properties['time']) + " (about " + hours + "h " + mins + "min ago)");
+                } else {
+                    out.push("Time: " + formatDate(f.properties['time']) + " (about " + Math.round(dateDiff / 86400) + " days ago)");
+                }
+                out.push("");
+            }
+            if ('title' in f.properties) {
+                out.push("<b>" + f.properties['title']+"</b>");
+            }
+            if ('mag' in f.properties) {
+                out.push("Mag: " + f.properties['mag']);
+            }
+            if ('depth' in f.properties) {
+                out.push("Depth: " + f.properties['depth'] + ' km');
+            }
+            if ('lat' in f.properties && 'lon' in f.properties) {
+                out.push("Coord: " + f.properties['lat'] + '/' + f.properties['lon']);
+            }
+            out.push("");
+            if ('magtype' in f.properties) {
+                out.push("MagType: " + f.properties['magtype']);
+            }
+            if ('evtype' in f.properties) {
+                out.push("Evtype: " + f.properties['evtype']);
+            }
+            if ('auth' in f.properties) {
+                out.push("Author: " + f.properties['auth']);
+            }
+            if ('source_id' in f.properties) {
+                out.push("source_id: " + f.properties['source_id']);
+            }
+            if ('url' in f.properties) {
+                out.push('URL: <a href="' + f.properties['url'] + '" target="_blank">' +
+                    f.properties['url'] + '</a>'
+                );
+            }
+
+            out.push("");
+            if ('lastupdate' in f.properties) {
+                out.push("Last Update: " + formatDate(f.properties['lastupdate']));
+            }
+
+            let date = new Date(f.properties['time']).getTime() / 1000;
+            let dateDiff = (now - date) / 86400;
+            out.push("dateDiff: " + dateDiff.toString());
+            console.log(f.properties);
+
+        }
+
+        if (f.id) {
+            out.push("");
+
+            if (source !== undefined && source == "ZAMG") {
+                let url = 'https://www.zamg.ac.at/cms/de/geophysik/erdbeben/aktuelle-erdbeben/karten-und-listen/';
+                    url += 'bebendetails/austria/quakes/evid' + f.id;
+                out.push('URL: <a href="' + url + '" target="_blank">' + url + '</a>');
+            }
+            out.push("ID: " + f.id);
+        }
+
+        l.bindPopup(out.join("<br />"));
+    }
+
+    function filterMarkers() {
+        zamgLayer.eachLayer(function (layer) {
+            if (layer.hasOwnProperty('feature') &&
+                layer['feature'].hasOwnProperty('properties') &&
+                layer['feature']['properties'].hasOwnProperty('time')
+            ) {
+                let date = new Date(layer['feature']['properties']['time']).getTime() / 1000;
+                let dateDiff = (now - date) / 86400;
+                if (dateDiff > timeFilter) {
+                    layer.getElement().style.display = "none";
+                } else {
+                    layer.getElement().style.display = "";
+                }
+            }
+        });
+        usgsLayer.eachLayer(function (layer) {
+            if (layer.hasOwnProperty('feature') &&
+                layer['feature'].hasOwnProperty('properties') &&
+                layer['feature']['properties'].hasOwnProperty('time')
+            ) {
+                let date = new Date(layer['feature']['properties']['time']).getTime() / 1000;
+                let dateDiff = (now - date) / 86400;
+                if (dateDiff > timeFilter) {
+                    layer.getElement().style.display = "none";
+                } else {
+                    layer.getElement().style.display = "";
+                }
+            }
+        });
+    }
+
+    //map.on('locationfound', onLocationFound);
+    //map.on('locationerror', onLocationError);
+    if (location.hash === '') {
+        map.locate({setView: true, maxZoom: 16});
+    }
+
+    // add the OpenStreetMap tiles
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution:
+            'Map: &copy; <a href="https://openstreetmap.org/copyright" target="_blank">OpenStreetMap contributors</a>'
+    }).addTo(map);
+
+    const OpenTopoMap = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+        maxZoom: 17,
+        attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
+    });
+
+    const zamgLayer = new L.GeoJSON.AJAX("lastmonth.json",
+        {
+            onEachFeature: ((f, l) => popUp(f, l, 'ZAMG')),
+            attribution:
+                'ZAMG Bebendaten: &copy; <a href="'+
+                'https://www.zamg.ac.at/cms/de/geophysik/erdbeben/aktuelle-erdbeben/karten-und-listen" ' +
+                'target="_blank">Österreichischer Erdbebendienst, ZAMG</a>',
+            pointToLayer: function (geoJsonPoint, latlng) {
+                let mag = 'unk';
+                let iconSize = iconSizes[0];
+                if (geoJsonPoint.hasOwnProperty('properties') &&
+                    geoJsonPoint['properties'].hasOwnProperty('mag')
+                ) {
+                    mag = geoJsonPoint['properties']['mag'];
+                    if (mag >= 1 && mag < 2) {
+                        iconSize = iconSizes[1];
+                    } else if (mag >= 2 && mag < 3) {
+                        iconSize = iconSizes[2];
+                    } else if (mag >= 3) {
+                        iconSize = iconSizes[3];
+                    }
+                }
+
+                let color = '#757575';
+                if (geoJsonPoint.hasOwnProperty('properties') &&
+                    geoJsonPoint['properties'].hasOwnProperty('time')
+                ) {
+                    let date = new Date(geoJsonPoint['properties']['time']).getTime() / 1000;
+                    let dateDiff = (now - date) / 86400;
+                    if (dateDiff <= 1) {
+                        color = '#0000FF';
+                    } else if (dateDiff <= 3) {
+                        color = '#FF0000';
+                    } else if (dateDiff <= 7) {
+                        color = '#FFFF00';
+                    } else if (dateDiff <= 14) {
+                        color = '#00BFFF';
+                    }
+                }
+
+                // https://github.com/iatkin/leaflet-svgicon
+                return L.marker.svgMarker(latlng, {
+                    iconOptions: {
+                        color: color,
+                        circleText: mag,
+                        iconSize: iconSize,
+                        fontSize: 12,
+                        circleRatio: 0.65
+                    }
+                });
+            }
+        }
+    ).addTo(map);
+
+    const usgsLayer = new L.GeoJSON.AJAX("https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/2.5_month.geojson",
+        {
+            onEachFeature: popUp,
+            attribution:
+                'USGS Bebendaten: &copy; <a href="https://earthquake.usgs.gov/earthquakes/feed/" ' +
+                'target="_blank">USGS Earthquake Hazards Program</a>, ',
+            pointToLayer: function (geoJsonPoint, latlng) {
+                let mag = 'unk';
+                let iconSize = iconSizes[0];
+                if (geoJsonPoint.hasOwnProperty('properties') &&
+                    geoJsonPoint['properties'].hasOwnProperty('mag')
+                ) {
+                    mag = geoJsonPoint['properties']['mag'];
+                    if (mag >= 1 && mag < 2) {
+                        iconSize = iconSizes[1];
+                    } else if (mag >= 2 && mag < 3) {
+                        iconSize = iconSizes[2];
+                    } else if (mag >= 3) {
+                        iconSize = iconSizes[3];
+                    }
+                }
+
+                let color = '#757575';
+                if (geoJsonPoint.hasOwnProperty('properties') &&
+                    geoJsonPoint['properties'].hasOwnProperty('time')
+                ) {
+                    let date = new Date(geoJsonPoint['properties']['time']).getTime() / 1000;
+                    let dateDiff = (now - date) / 86400;
+                    if (dateDiff <= 1) {
+                        color = '#0000FF';
+                    } else if (dateDiff <= 3) {
+                        color = '#FF0000';
+                    } else if (dateDiff <= 7) {
+                        color = '#FFFF00';
+                    } else if (dateDiff <= 14) {
+                        color = '#00BFFF';
+                    }
+                }
+
+                // https://github.com/iatkin/leaflet-svgicon
+                return L.marker.svgMarker(latlng, {
+                    iconOptions: {
+                        color: color,
+                        circleText: mag,
+                        iconSize: iconSize,
+                        fontSize: 12,
+                        circleRatio: 0.65
+                    }
+                });
+            }
+        }
+    ).addTo(map);
+
+    const hash = new L.Hash(map);
+
+    const rangeControl = L.control({position: 'topright'});
+    rangeControl.onAdd = function (map) {
+        const div = L.DomUtil.create('div', 'leaflet-control-layers leaflet-control-layers-expanded');
+        div.id = 'rangefilterdiv';
+        let str = '';
+        str = str + '<label><div><input name="orgSpan" class="leaflet-control-layers-selector" type="radio" value="1">';
+        str = str + '<span>Last 24 hours</span></div></label>';
+        str = str + '<label><div><input name="orgSpan" class="leaflet-control-layers-selector" type="radio" value="3">';
+        str = str + '<span>Last 72 hours</span></div></label>';
+        str = str + '<label><div><input name="orgSpan" class="leaflet-control-layers-selector" type="radio" value="7">';
+        str = str + '<span>Last week</span></div></label>';
+        str = str + '<label><div><input name="orgSpan" class="leaflet-control-layers-selector" type="radio" value="14">';
+        str = str + '<span>Last 14 days</span></div></label>';
+        str = str + '<label><div><input name="orgSpan" class="leaflet-control-layers-selector" type="radio" value="32" checked>';
+        str = str + '<span>Last month</span></div></label>';
+        div.innerHTML = str;
+        div.firstChild.onmousedown = div.firstChild.ondblclick = L.DomEvent.stopPropagation;
+        L.DomEvent.on(div, 'change', function (e) {
+            timeFilter = parseInt(e.target.value);
+            filterMarkers();
+        });
+
+        return div;
+    };
+    rangeControl.addTo(map);
+
+    const mapLayers = {
+        'Open Street Map': osm,
+        'OpenTopoMap': OpenTopoMap
+    };
+
+    const overlays = {
+        'ZAMG Bebendaten': zamgLayer,
+        'USGS Bebendaten': usgsLayer
+    };
+
+    const layerControl = L.control.layers(mapLayers, overlays, {sortLayers: true}).addTo(map);
+
+    L.easyButton('<span class="locator">&target;</span>', function () {
+        map.locate({setView: true, maxZoom: 16});
+    }).addTo(map);
+</script>
+
+
+</body>
+</html>
+
