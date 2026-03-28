@@ -5,7 +5,8 @@ Visible here: https://kolmann.at/beben/
 # Data used
 ## ZAMG
 * https://www.data.gv.at/katalog/dataset/9100472e-bf26-49e2-90df-64c436521157
-* http://geoweb.zamg.ac.at/static/event/lastmonth.json
+* ~~http://geoweb.zamg.ac.at/static/event/lastmonth.json~~ (Not working anymore)
+* https://www.geosphere.at/data/earthquakes
 
 
 ## USGS Earthquakes

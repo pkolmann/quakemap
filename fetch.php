@@ -1,70 +1,461 @@
+#!/usr/bin/php
 <?php
 
-function human_filesize($bytes, $decimals = 2) {
-  $sz = 'BKMGTP';
-  $factor = floor((strlen($bytes) - 1) / 3);
-  return sprintf("%.{$decimals}f", $bytes / pow(1024, $factor)) . @$sz[$factor];
+use JetBrains\PhpStorm\NoReturn;
+
+$appDir = dirname(__FILE__);
+require_once $appDir . '/config.php';
+
+#[NoReturn]
+function printHelp(): void
+{
+    echo "Usage: fetch.php [options]\n";
+    echo "Options:\n";
+    echo "  -h, --help      Show this help message\n";
+    echo "  -f, --force     Force download even if not modified\n";
+    echo "  -d, --debug     Enable debug mode\n";
+    exit(0);
 }
 
-$url = 'http://geoweb.zamg.ac.at/static/event/lastmonth.json';
-#$url = 'http://geoweb.zamg.ac.at/static/event/lastweek.json';
-$file = __DIR__.'/lastmonth.json';
-$log = __DIR__.'/log.txt';
-$headers = get_headers($url, true);
-$lastMod = strtotime($headers['Last-Modified']);
-if (file_exists($file)) {
-    $lastModLocal = filemtime($file);
-}
-
-$lastModLocal = 0;
-if ($lastModLocal < $lastMod) {
-    $data = file_get_contents($url);
-    if (json_decode($data)) {
-        file_put_contents($log, date("Y-m-d H:i:s").": Download OK, ".human_filesize(strlen($data))."\n", FILE_APPEND);
-        if (checkGeoJSON($data)) {
-            file_put_contents($log, "    Reordered coords.\n", FILE_APPEND);
+function getKeyValue($source, $key, $data, $returnNullOnFail = false) {
+    if (!isset($data[$key])) {
+        if ($returnNullOnFail) {
+            return null;
         }
-        file_put_contents($file, $data);
+        print "Error fetching $source data: No $key\n";
+        print_r($data);
+        die(-2);
+    }
+    return $data[$key];
+}
+
+$opt = getopt('dfh:', ['debug', 'force', 'help']);
+$FORCE = isset($opt['f']) || isset($opt['force']);
+$DEBUG = isset($opt['d']) || isset($opt['debug']);
+if (isset($opt['h']) || isset($opt['help'])) {
+    printHelp();
+}
+
+// connect to database
+$db = new mysqli(DB_HOST, DB_USER, DB_PASS, DB_NAME);
+if (mysqli_connect_errno()) {
+    die("Failed to connect to MySQL: " . mysqli_connect_error());
+}
+
+$stats = [
+    'Geosphere' => [
+        'inserted' => 0,
+        'updated' => 0,
+        'unchanged' => 0,
+        'mag_inserted' => 0,
+        'mag_updated' => 0,
+        'mag_unchanged' => 0,
+    ],
+    'USGS' => [
+        'inserted' => 0,
+        'updated' => 0,
+        'unchanged' => 0,
+        'mag_inserted' => 0,
+        'mag_updated' => 0,
+        'mag_unchanged' => 0,
+    ]
+];
+
+$source = null;
+$source_id = null;
+$getQuake = $db->prepare(<<<SQL
+    SELECT quake_id, time,
+           latitude, longitude, depth, magnitude_ml,
+           location, region, comment, url, author
+    FROM quakes
+    WHERE source = ? AND source_id = ?
+    LIMIT 1
+SQL);
+
+
+$quake_id = null;
+$getMags = $db->prepare(<<<SQL
+    SELECT mag_id, type, value
+    FROM magnitudes
+    WHERE quake_id = ?
+SQL);
+$getMags->bind_param("i", $quake_id);
+
+$time = null;
+$lat = null;
+$lng = null;
+$depth = null;
+$magnitude_ml = null;
+$location = null;
+$region = null;
+$comment = null;
+$url = null;
+$author = null;
+$insertQuake = $db->prepare(<<<SQL
+    INSERT INTO quakes (source, source_id, time, latitude, longitude, depth, magnitude_ml,
+        location, region, comment, url, author)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+SQL);
+$insertQuake->bind_param("ssdddddsssss", $source, $source_id, $time, $lat, $lng, $depth, $magnitude_ml,
+    $location, $region, $comment, $url, $author);
+
+$setQuake = $db->prepare(<<<SQL
+    UPDATE quakes
+    SET time = ?, latitude = ?, longitude = ?, depth = ?, magnitude_ml = ?,
+        location = ?, region = ?, comment = ?, url = ?, author = ?
+    WHERE quake_id = ?
+SQL);
+$setQuake->bind_param("dddddsssssi", $time, $lat, $lng, $depth, $magnitude_ml,
+    $location, $region, $comment, $url, $author, $quake_id);
+
+$magType = null;
+$magValue = null;
+$insertMag = $db->prepare(<<<SQL
+    INSERT INTO magnitudes (quake_id, type, value)
+    VALUES (?, ?, ?)
+SQL);
+
+$mag_id = null;
+$setMag = $db->prepare(<<<SQL
+    UPDATE magnitudes
+    SET type = ?, value = ?
+    WHERE mag_id = ?
+SQL);
+
+function fetchQuake($getQuake, $source, $source_id) {
+    $getQuake->bind_param("ss", $source, $source_id);
+    $getQuake->execute();
+    $result = $getQuake->get_result();
+    if ($result->num_rows == 0) {
+        $result->free();
+        return null;
+    }
+    $row = $result->fetch_assoc();
+    $result->free();
+    return $row;
+}
+
+function fetchMags($getMags, $quake_id) {
+    $getMags->bind_param("s", $quake_id);
+    $getMags->execute();
+    $result = $getMags->get_result();
+    if ($result->num_rows == 0) {
+        $result->free();
+        return null;
+    }
+    $rows = $result->fetch_all(MYSQLI_ASSOC);
+    $result->free();
+    return $rows;
+}
+
+function processQuake(
+    $DEBUG,
+    $db,
+    $getQuake,
+    $setQuake,
+    $insertQuake,
+    $getMags,
+    $setMag,
+    $insertMag,
+    $source,
+    $source_id,
+    $time,
+    $lat,
+    $lng,
+    $depth,
+    $magType,
+    $magnitude_ml,
+    $magnitudes,
+    $location,
+    $region,
+    $comment,
+    $url,
+    $author,
+    &$stats
+): void
+{
+    $stored = fetchQuake($getQuake, $source, $source_id);
+    if ($stored) {
+        $update = false;
+        $quake_id = $stored['quake_id'];
+        if ($stored['time'] != $time) {
+            print "Time changed from {$stored['time']} to $time\n";
+            $update = true;
+        }
+        if ($stored['latitude'] != $lat) {
+            print "Latitude changed from {$stored['latitude']} to $lat\n";
+            $update = true;
+        }
+        if ($stored['longitude'] != $lng) {
+            print "Longitude changed from {$stored['longitude']} to $lng\n";
+            $update = true;
+        }
+        if ($stored['depth'] != $depth) {
+            print "Depth changed from {$stored['depth']} to $depth\n";
+            $update = true;
+        }
+        if ($stored['magnitude_ml'] != $magnitude_ml) {
+            print "Magnitude (ML) changed from {$stored['magnitude_ml']} to $magnitude_ml\n";
+            $update = true;
+        }
+        if ($stored['location'] != $location) {
+            print "Location changed from {$stored['location']} to $location\n";
+            $update = true;
+        }
+        if ($stored['region'] != $region) {
+            print "Region changed from {$stored['region']} to $region\n";
+            $update = true;
+        }
+        if ($stored['comment'] != $comment) {
+            print "Comment changed from {$stored['comment']} to $comment\n";
+            $update = true;
+        }
+        if ($stored['url'] != $url) {
+            print "URL changed from {$stored['url']} to $url\n";
+            $update = true;
+        }
+        if ($stored['author'] != $author) {
+            print "Author changed from {$stored['author']} to $author\n";
+            $update = true;
+        }
+        if ($update) {
+            $result = $setQuake->execute();
+            if (!$result) {
+                print "Error updating Quake:\n";
+                print $setQuake->error;
+                print "\n\n";
+                exit(-3);
+            }
+            $stats[$source]['updated']++;
+        } else {
+            $stats[$source]['unchanged']++;
+        }
     } else {
-        file_put_contents($log, date("Y-m-d H:i:s").": Download failed\n", FILE_APPEND);
+        if ($DEBUG) {
+            print "Inserting Geosphere data:\n";
+            print <<<SQL
+                INSERT INTO quakes (source, source_id, time, latitude, longitude, depth, magnitude_ml,
+                    location, region, comment, url, author)
+                VALUES ('$source', '$source_id', $time, $lat, $lng, $depth, $magnitude_ml,
+                    '$location', '$region', '$comment', '$url', '$author')
+            SQL;
+        }
+        $result = $insertQuake->execute();
+        if (!$result) {
+            print "Error inserting Quake:\n";
+            print $insertQuake->error;
+            print "\n\n";
+            exit(-4);
+        }
+        $stats[$source]['inserted']++;
+        $quake_id = $db->insert_id;
     }
-} else {
-        file_put_contents($log, date("Y-m-d H:i:s").": No Download needed\n", FILE_APPEND);
+
+    if (is_array($magnitudes)) {
+        $storedMags = fetchMags($getMags, $quake_id);
+
+        if (is_array($storedMags)) {
+            foreach ($magnitudes as $mkey => $magnitude) {
+                foreach ($storedMags as $storedMag) {
+                    if ($magnitude[1] == $storedMag['type']) {
+                        if ($magnitude[0] != $storedMag['value']) {
+                            print "Magnitude {$storedMag['type']} changed from {$storedMag['value']} to {$magnitude[0]}\n";
+                            $mag_id = $storedMag['mag_id'];
+                            $magType = $magnitude[1];
+                            $magValue = $magnitude[0];
+                            $setMag->bind_param("sdi", $magType, $magValue, $mag_id);
+                            $result = $setMag->execute();
+                            if (!$result) {
+                                print "Error updating Magnitude:\n";
+                                print $setMag->error;
+                                print "\n\n";
+                                exit(-5);
+                            }
+                            $stats[$source]['mag_updated']++;
+                        } else {
+                            $stats[$source]['mag_unchanged']++;
+                        }
+                        unset($storedMags[$magType]);
+                        unset($magnitudes[$mkey]);
+                    }
+                }
+            }
+        }
+        foreach ($magnitudes as $magnitude) {
+            $magType = $magnitude[1];
+            $magValue = $magnitude[0];
+            $insertMag->bind_param("isd", $quake_id, $magType, $magValue);
+            $result = $insertMag->execute();
+            if (!$result) {
+                print "Error updating Magnitude:\n";
+                print $insertMag->error;
+                print "\n\n";
+                exit(-6);
+            }
+            $stats[$source]['mag_inserted']++;
+        }
+    }
 }
 
-file_put_contents($log, "    last mod rem: ".date("Y-m-d H:i:s\n", $lastMod), FILE_APPEND);
-file_put_contents($log, "    last mod loc: ".date("Y-m-d H:i:s\n", $lastModLocal), FILE_APPEND);
-file_put_contents($log, "------------------\n", FILE_APPEND);
-
-
-function checkGeoJSON(& $data) {
-    $json = json_decode($data, true);
-    if (!array_key_exists('features', $json)) {
-        return false;
-    }
-
-    $max = [0, 0];
-    foreach ($json['features'] as $f) {
-        if (!array_key_exists('geometry', $f) || !array_key_exists('coordinates', $f['geometry'])) {
-            continue;
-        }
-        if ($f['geometry']['coordinates'][0] > $max[0]) {
-            $max[0] = $f['geometry']['coordinates'][0];
-        }
-        if ($f['geometry']['coordinates'][1] > $max[1]) {
-            $max[1] = $f['geometry']['coordinates'][1];
-        }
-    }
-
-    if ($max[0] < $max[1]) {
-        # need to switch data
-        foreach ($json['features'] as $i => $f) {
-            $x = $json['features'][$i]['geometry']['coordinates'][0];
-            $json['features'][$i]['geometry']['coordinates'][0] = $json['features'][$i]['geometry']['coordinates'][1];
-            $json['features'][$i]['geometry']['coordinates'][1] = $x;
-        }
-        $data = json_encode($json);
-        return true;
-    }
-    return false;
+# ================================================
+# Import Geosphere Data
+$data = json_decode(file_get_contents("https://www.geosphere.at/data/earthquakes"), true);
+if (is_null($data)) {
+    print "Error fetching Geosphere data:\n";
+    print json_last_error_msg();
+    print "\n\n";
+    goto usgs;
 }
+
+$source = 'Geosphere';
+foreach ($data as $row) {
+    $source_id = getKeyValue($source, 'event_id', $row);
+    $time = strtotime(getKeyValue($source, 'datetime_utc', $row));
+    $lat = getKeyValue($source, 'lat', $row);
+    $lng = getKeyValue($source, 'lon', $row);
+    $depth = getKeyValue($source, 'depth', $row);
+    $magnitudes = getKeyValue($source, 'magnitudes', $row);
+    $magnitude_ml = null;
+    if (is_array($magnitudes)) {
+        foreach ($magnitudes as $magnitude) {
+            if ($magnitude[1] == 'ml') {
+                $magnitude_ml = $magnitude[0];
+                break;
+            }
+        }
+    }
+    $location = getKeyValue($source, 'epicenter', $row);
+    $region = getKeyValue($source, 'region', $row);
+    $comment = getKeyValue($source, 'maptitle', $row);
+    $url = null;
+    $author = getKeyValue($source, 'author', $row);
+
+    processQuake(
+        $DEBUG,
+        $db,
+        $getQuake,
+        $setQuake,
+        $insertQuake,
+        $getMags,
+        $setMag,
+        $insertMag,
+        $source,
+        $source_id,
+        $time,
+        $lat,
+        $lng,
+        $depth,
+        $magType,
+        $magnitude_ml,
+        $magnitudes,
+        $location,
+        $region,
+        $comment,
+        $url,
+        $author,
+        $stats
+    );
+}
+
+# ================================================
+# Import USGS data
+usgs:
+$data = json_decode(file_get_contents('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_month.geojson'), true);
+if (is_null($data)) {
+    print "Error fetching USGS data:\n";
+    print json_last_error_msg();
+    print "\n\n";
+    goto finish;
+}
+
+$source = 'USGS';
+if (!isset($data['features'])) {
+    print "Error fetching USGS data: no features\n";
+    goto finish;
+}
+foreach ($data['features'] as $row) {
+    if (!isset($row['properties']) || !isset($row['geometry'])) {
+        print "Error fetching USGS data: no properties or geometry\n";
+        print_r($row);
+        continue;
+    }
+    $source_id = getKeyValue($source, 'id', $row);
+    $time = getKeyValue($source, 'time', $row['properties']) / 1000;
+    $lat = null;
+    $lng = null;
+    $depth = null;
+
+    $geometry = getKeyValue($source, 'geometry', $row);
+    $lat = null;
+    $lng = null;
+    $depth = null;
+    if (!is_null($geometry)) {
+        $coordinates = getKeyValue($source, 'coordinates', $geometry);
+        if (is_array($coordinates)) {
+            if (isset($coordinates[0])) {
+                $lat = $coordinates[0];
+            }
+            if (isset($coordinates[1])) {
+                $lng = $coordinates[1];
+            }
+            if (isset($coordinates[2])) {
+                $depth = $coordinates[2];
+            }
+        } else {
+            print "Error fetching USGS data: Coordinates is not an array\n";
+            print_r($coordinates);
+            die();
+        }
+    }
+    if (is_null($lat) || is_null($lng)) {
+        print "Error fetching USGS data: No coordinates found.\n";
+        print_r($row);
+        die();
+    }
+
+    $magnitude_ml = null;
+    $magType = getKeyValue($source, 'magType', $row['properties'], true);
+    $magValue = getKeyValue($source, 'mag', $row['properties'], true);
+    $magnitudes = [];
+    if (!is_null($magType)) {
+        $magnitudes = [[$magValue, $magType]];
+        if ($magType == 'ml') {
+            $magnitude_ml = $magValue;
+        }
+    }
+
+    $location = null;
+    $region = null;
+    $comment = getKeyValue($source, 'title', $row['properties']);
+    $url = getKeyValue($source, 'url', $row['properties']);
+    $author = getKeyValue($source, 'sources', $row['properties']);
+
+    processQuake(
+        $DEBUG,
+        $db,
+        $getQuake,
+        $setQuake,
+        $insertQuake,
+        $getMags,
+        $setMag,
+        $insertMag,
+        $source,
+        $source_id,
+        $time,
+        $lat,
+        $lng,
+        $depth,
+        $magType,
+        $magnitude_ml,
+        $magnitudes,
+        $location,
+        $region,
+        $comment,
+        $url,
+        $author,
+        $stats
+    );
+}
+
+finish:
+print_r($stats);
