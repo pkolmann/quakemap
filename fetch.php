@@ -46,18 +46,14 @@ $stats = [
     'Geosphere' => [
         'inserted' => 0,
         'updated' => 0,
-        'unchanged' => 0,
         'mag_inserted' => 0,
         'mag_updated' => 0,
-        'mag_unchanged' => 0,
     ],
     'USGS' => [
         'inserted' => 0,
         'updated' => 0,
-        'unchanged' => 0,
         'mag_inserted' => 0,
         'mag_updated' => 0,
-        'mag_unchanged' => 0,
     ]
 ];
 
@@ -227,8 +223,6 @@ function processQuake(
                 exit(-3);
             }
             $stats[$source]['updated']++;
-        } else {
-            $stats[$source]['unchanged']++;
         }
     } else {
         if ($DEBUG) {
@@ -272,8 +266,6 @@ function processQuake(
                                 exit(-5);
                             }
                             $stats[$source]['mag_updated']++;
-                        } else {
-                            $stats[$source]['mag_unchanged']++;
                         }
                         unset($storedMags[$magType]);
                         unset($magnitudes[$mkey]);
