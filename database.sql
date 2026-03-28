@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS `quakes`
 
 create index if not exists quakes_source_source_id_index
     on quakes (source, source_id);
+create index if not exists quakes_time_index
+    on quakes (time);
+
 
 CREATE TABLE IF NOT EXISTS magnitudes
 (
