@@ -158,34 +158,40 @@
     }
 
     function filterMarkers() {
-        zamgLayer.eachLayer(function (layer) {
-            if (layer.hasOwnProperty('feature') &&
-                layer['feature'].hasOwnProperty('properties') &&
-                layer['feature']['properties'].hasOwnProperty('time')
-            ) {
-                let date = new Date(layer['feature']['properties']['time']).getTime() / 1000;
-                let dateDiff = (now - date) / 86400;
-                if (dateDiff > timeFilter) {
-                    layer.getElement().style.display = "none";
-                } else {
-                    layer.getElement().style.display = "";
+        if (map.hasLayer(zamgLayer)) {
+            zamgLayer.eachLayer(function (layer) {
+                if (layer.hasOwnProperty('feature') &&
+                    layer['feature'].hasOwnProperty('properties') &&
+                    layer['feature']['properties'].hasOwnProperty('time')
+                ) {
+                    let date = new Date(layer['feature']['properties']['time']).getTime() / 1000;
+                    let dateDiff = (now - date) / 86400;
+                    if (dateDiff > timeFilter) {
+                        layer.getElement().style.display = "none";
+                    } else {
+                        layer.getElement().style.display = "";
+                    }
                 }
-            }
-        });
-        usgsLayer.eachLayer(function (layer) {
-            if (layer.hasOwnProperty('feature') &&
-                layer['feature'].hasOwnProperty('properties') &&
-                layer['feature']['properties'].hasOwnProperty('time')
-            ) {
-                let date = new Date(layer['feature']['properties']['time']).getTime() / 1000;
-                let dateDiff = (now - date) / 86400;
-                if (dateDiff > timeFilter) {
-                    layer.getElement().style.display = "none";
-                } else {
-                    layer.getElement().style.display = "";
+            });
+        }
+        if (map.hasLayer(usgsLayer)) {
+            usgsLayer.eachLayer(function (layer) {
+                console.log(layer);
+                if (layer.hasOwnProperty('feature') &&
+                    layer['feature'].hasOwnProperty('properties') &&
+                    layer['feature']['properties'].hasOwnProperty('time')
+                ) {
+                    let date = new Date(layer['feature']['properties']['time']).getTime() / 1000;
+                    let dateDiff = (now - date) / 86400;
+                    console.log("USGS date: ", date, dateDiff, timeFilter, dateDiff > timeFilter);
+                    if (dateDiff > timeFilter) {
+                        layer.getElement().style.display = "none";
+                    } else {
+                       layer.getElement().style.display = "";
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 
     //map.on('locationfound', onLocationFound);
