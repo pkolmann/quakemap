@@ -41,7 +41,7 @@ $query = <<<SQL
     SELECT q.quake_id,
            source,
            source_id,
-           time,
+           time * 1000 AS time,
            FROM_UNIXTIME(ROUND(time)) AS time_utc,
            latitude,
            longitude,
