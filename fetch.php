@@ -176,43 +176,63 @@ function processQuake(
         $update = false;
         $quake_id = $stored['quake_id'];
         if ($stored['time'] != $time) {
-            print "Time changed from {$stored['time']} to $time\n";
+            if ($DEBUG) {
+                print "Time changed from {$stored['time']} to $time\n";
+            }
             $update = true;
         }
         if ($stored['latitude'] != $lat) {
-            print "Latitude changed from {$stored['latitude']} to $lat\n";
+            if ($DEBUG) {
+                print "Latitude changed from {$stored['latitude']} to $lat\n";
+            }
             $update = true;
         }
         if ($stored['longitude'] != $lng) {
-            print "Longitude changed from {$stored['longitude']} to $lng\n";
+            if ($DEBUG) {
+                print "Longitude changed from {$stored['longitude']} to $lng\n";
+            }
             $update = true;
         }
         if ($stored['depth'] != $depth) {
-            print "Depth changed from {$stored['depth']} to $depth\n";
+            if ($DEBUG) {
+                print "Depth changed from {$stored['depth']} to $depth\n";
+            }
             $update = true;
         }
         if ($stored['magnitude_ml'] != $magnitude_ml) {
-            print "Magnitude (ML) changed from {$stored['magnitude_ml']} to $magnitude_ml\n";
+            if ($DEBUG) {
+                print "Magnitude (ML) changed from {$stored['magnitude_ml']} to $magnitude_ml\n";
+            }
             $update = true;
         }
         if ($stored['location'] != $location) {
-            print "Location changed from {$stored['location']} to $location\n";
+            if ($DEBUG) {
+                print "Location changed from {$stored['location']} to $location\n";
+            }
             $update = true;
         }
         if ($stored['region'] != $region) {
-            print "Region changed from {$stored['region']} to $region\n";
+            if ($DEBUG) {
+                print "Region changed from {$stored['region']} to $region\n";
+            }
             $update = true;
         }
         if ($stored['comment'] != $comment) {
-            print "Comment changed from {$stored['comment']} to $comment\n";
+            if ($DEBUG) {
+                print "Comment changed from {$stored['comment']} to $comment\n";
+            }
             $update = true;
         }
         if ($stored['url'] != $url) {
-            print "URL changed from {$stored['url']} to $url\n";
+            if ($DEBUG) {
+                print "URL changed from {$stored['url']} to $url\n";
+            }
             $update = true;
         }
         if ($stored['author'] != $author) {
-            print "Author changed from {$stored['author']} to $author\n";
+            if ($DEBUG) {
+                print "Author changed from {$stored['author']} to $author\n";
+            }
             $update = true;
         }
         if ($update) {
