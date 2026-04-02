@@ -169,7 +169,7 @@
         if (f.id) {
             out.push("");
 
-            if (source !== undefined && source == "ZAMG") {
+            if (source !== undefined && source === "ZAMG") {
                 let url = 'https://www.zamg.ac.at/cms/de/geophysik/erdbeben/aktuelle-erdbeben/karten-und-listen/';
                     url += 'bebendetails/austria/quakes/evid' + f.id;
                 out.push('URL: <a href="' + url + '" target="_blank">' + url + '</a>');
