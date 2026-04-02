@@ -76,8 +76,8 @@ while ($row = $result->fetch_assoc()) {
         'geometry' => [
             'type' => 'Point',
             'coordinates' => [
-                floatval($row['latitude']),
                 floatval($row['longitude']),
+                floatval($row['latitude']),
                 floatval($row['depth'])
             ]
         ],
