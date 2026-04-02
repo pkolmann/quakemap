@@ -29,9 +29,10 @@ function getKeyValue($source, $key, $data, $returnNullOnFail = false) {
     return $data[$key];
 }
 
-$opt = getopt('dfh:', ['debug', 'force', 'help']);
+$opt = getopt('dfh:v', ['debug', 'force', 'help', 'verbose']);
 $FORCE = isset($opt['f']) || isset($opt['force']);
 $DEBUG = isset($opt['d']) || isset($opt['debug']);
+$VERBOSE = isset($opt['v']) || isset($opt['verbose']);
 if (isset($opt['h']) || isset($opt['help'])) {
     printHelp();
 }
@@ -462,4 +463,6 @@ foreach ($data['features'] as $row) {
 }
 
 finish:
-print_r($stats);
+if ($VERBOSE || $DEBUG) {
+    print_r($stats);
+}
