@@ -96,19 +96,37 @@
                 }
                 out.push("");
             }
+            console.log("Point properties: ", f.properties);
             if ('title' in f.properties) {
                 out.push("<b>" + f.properties['title']+"</b>");
             }
+            if ('comment' in f.properties) {
+                out.push("<b>" + f.properties['comment']+"</b>");
+            }
             if ('mag' in f.properties) {
                 out.push("Mag: " + f.properties['mag']);
+            }
+            if ('magnitude_ml' in f.properties) {
+                out.push("Mag: " + f.properties['magnitude_ml']);
             }
             if ('depth' in f.properties) {
                 out.push("Depth: " + f.properties['depth'] + ' km');
             }
             if ('lat' in f.properties && 'lon' in f.properties) {
-                out.push("Coord: " + f.properties['lat'] + '/' + f.properties['lon']);
+                out.push("Coord: " + f.properties['lat'] + ' / ' + f.properties['lon']);
+            }
+            if (f.geometry && f.geometry.type === 'Point') {
+                if (f.geometry.coordinates && f.geometry.coordinates.length === 3) {
+                    out.push("Depth: " + f.geometry.coordinates[2] + ' km');
+                }
+                if (f.geometry.coordinates && f.geometry.coordinates.length >= 2) {
+                    out.push("Coord: " + f.geometry.coordinates[1] + ' / ' + f.geometry.coordinates[0]);
+                }
             }
             out.push("");
+            if ('magnitude_ml' in f.properties) {
+                out.push("MagType: ML");
+            }
             if ('magtype' in f.properties) {
                 out.push("MagType: " + f.properties['magtype']);
             }
@@ -118,10 +136,19 @@
             if ('auth' in f.properties) {
                 out.push("Author: " + f.properties['auth']);
             }
+            if ('author' in f.properties) {
+                out.push("Author: " + f.properties['author']);
+            }
             if ('source_id' in f.properties) {
                 out.push("source_id: " + f.properties['source_id']);
             }
-            if ('url' in f.properties) {
+            if (
+                'url' in f.properties
+                && f.properties['url'] !== null
+                && f.properties['url'] !== undefined
+                && f.properties['url'] !== ''
+                && f.properties['url'] !== 'null'
+            ) {
                 out.push('URL: <a href="' + f.properties['url'] + '" target="_blank">' +
                     f.properties['url'] + '</a>'
                 );
@@ -154,8 +181,8 @@
     }
 
     function filterMarkers() {
-        if (map.hasLayer(zamgLayer)) {
-            zamgLayer.eachLayer(function (layer) {
+        if (map.hasLayer(geosphereLayer)) {
+            geosphereLayer.eachLayer(function (layer) {
                 if (layer.hasOwnProperty('feature') &&
                     layer['feature'].hasOwnProperty('properties') &&
                     layer['feature']['properties'].hasOwnProperty('time')
@@ -208,20 +235,21 @@
         attribution: 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="http://viewfinderpanoramas.org">SRTM</a> | Map style: &copy; <a href="https://opentopomap.org">OpenTopoMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)'
     });
 
-    const zamgLayer = new L.GeoJSON.AJAX("lastmonth.json",
+    const geosphereLayer = new L.GeoJSON.AJAX("getQuakes.php?source=Geosphere",
         {
-            onEachFeature: ((f, l) => popUp(f, l, 'ZAMG')),
+            onEachFeature: ((f, l) => popUp(f, l, 'GeoSphere')),
             attribution:
-                'ZAMG Bebendaten: &copy; <a href="'+
-                'https://www.zamg.ac.at/cms/de/geophysik/erdbeben/aktuelle-erdbeben/karten-und-listen" ' +
-                'target="_blank">Österreichischer Erdbebendienst, ZAMG</a>',
+                'geosphere.at Bebendaten: &copy; <a href="'+
+                'https://geosphere.at/de/karten/aktuelle-erdbeben" ' +
+                'target="_blank">Geosphere Austria</a>',
             pointToLayer: function (geoJsonPoint, latlng) {
+                console.log("geoJsonPoint: ", geoJsonPoint, latlng);
                 let mag = 'unk';
                 let iconSize = iconSizes[0];
                 if (geoJsonPoint.hasOwnProperty('properties') &&
-                    geoJsonPoint['properties'].hasOwnProperty('mag')
+                    geoJsonPoint['properties'].hasOwnProperty('magnitude_ml')
                 ) {
-                    mag = geoJsonPoint['properties']['mag'];
+                    mag = geoJsonPoint['properties']['magnitude_ml'];
                     if (mag >= 1 && mag < 2) {
                         iconSize = iconSizes[1];
                     } else if (mag >= 2 && mag < 3) {
@@ -349,7 +377,7 @@
     };
 
     const overlays = {
-        'ZAMG Bebendaten': zamgLayer,
+        'ZAMG Bebendaten': geosphereLayer,
         'USGS Bebendaten': usgsLayer
     };
 
