@@ -289,13 +289,28 @@ function processQuake(
     }
 }
 
+function fetchData($url) {
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    $data = curl_exec($ch);
+    curl_close($ch);
+    $data = json_decode($data, true);
+
+    if (is_null($data)) {
+        print "Error fetching Geosphere data:\n";
+        print json_last_error_msg();
+        print "\n\n";
+        return null;
+    }
+    return $data;
+}
+
 # ================================================
 # Import Geosphere Data
-$data = json_decode(file_get_contents("https://www.geosphere.at/data/earthquakes"), true);
+$data = fetchData("https://www.geosphere.at/data/earthquakes");
 if (is_null($data)) {
-    print "Error fetching Geosphere data:\n";
-    print json_last_error_msg();
-    print "\n\n";
     goto usgs;
 }
 
@@ -352,11 +367,8 @@ foreach ($data as $row) {
 # ================================================
 # Import USGS data
 usgs:
-$data = json_decode(file_get_contents('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_month.geojson'), true);
+$data = fetchData('https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_month.geojson');
 if (is_null($data)) {
-    print "Error fetching USGS data:\n";
-    print json_last_error_msg();
-    print "\n\n";
     goto finish;
 }
 
