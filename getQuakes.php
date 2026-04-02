@@ -26,6 +26,14 @@ if (isset($_GET['source'])) {
     $WHERE = "      AND source = '" . $db->real_escape_string($_GET['source']) . "'";
 }
 
+$INTERVAL = 35;
+if (isset($_GET['interval'])) {
+    $INTERVAL = intval($db->real_escape_string(($_GET['interval'])));
+}
+if ($INTERVAL < 1 || $INTERVAL > 365) {
+    $INTERVAL = 35;
+}
+
 $query = <<<SQL
     WITH mags AS (SELECT quake_id, GROUP_CONCAT('"', magnitudes.type, '":', magnitudes.value) AS magnitudes
                   FROM magnitudes
@@ -47,7 +55,7 @@ $query = <<<SQL
            IF (m.magnitudes IS NOT NULL, CONCAT('{', m.magnitudes, '}'), null) AS magnitudes
     FROM quakes q
         LEFT JOIN mags m ON q.quake_id = m.quake_id
-    WHERE time > UNIX_TIMESTAMP(SUBDATE(NOW(), INTERVAL 35 DAY))
+    WHERE time > UNIX_TIMESTAMP(SUBDATE(NOW(), INTERVAL $INTERVAL DAY))
     $WHERE
     ORDER BY time DESC;
 SQL;
