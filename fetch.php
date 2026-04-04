@@ -274,7 +274,9 @@ function processQuake(
                 foreach ($storedMags as $storedMag) {
                     if ($magnitude[1] == $storedMag['type']) {
                         if ($magnitude[0] != $storedMag['value']) {
-                            print "Magnitude {$storedMag['type']} changed from {$storedMag['value']} to {$magnitude[0]}\n";
+                            if ($DEBUG) {
+                                print "Magnitude {$storedMag['type']} changed from {$storedMag['value']} to {$magnitude[0]}\n";
+                            }
                             $mag_id = $storedMag['mag_id'];
                             $magType = $magnitude[1];
                             $magValue = $magnitude[0];
